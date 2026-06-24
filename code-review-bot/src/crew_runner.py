@@ -1,10 +1,13 @@
 """Crew runner — orchestrate the code review agents."""
 
+import logging
 import os
 import sys
 from pathlib import Path
 
 from crewai import Crew, Process
+
+logger = logging.getLogger(__name__)
 
 
 def run_crew(target_dir: str, llm=None) -> str:
@@ -43,6 +46,7 @@ def run_crew(target_dir: str, llm=None) -> str:
         print(f"\n✅ Code Review completado.\n")
         return result
     except Exception as e:
+        logger.exception("Code Review falló")
         error_msg = f"❌ Code Review falló: {e}"
         print(error_msg)
         return error_msg

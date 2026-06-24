@@ -1,10 +1,13 @@
 """Crew runner — orchestrate the IT Support agents."""
 
+import logging
 import os
 import sys
 from pathlib import Path
 
 from crewai import Crew, Process
+
+logger = logging.getLogger(__name__)
 
 
 def run_crew(issue: str, llm=None) -> str:
@@ -31,6 +34,7 @@ def run_crew(issue: str, llm=None) -> str:
         print(f"\n✅ Soporte IT completado.\n")
         return result
     except Exception as e:
+        logger.exception("Soporte IT falló")
         error_msg = f"❌ Soporte IT falló: {e}"
         print(error_msg)
         return error_msg

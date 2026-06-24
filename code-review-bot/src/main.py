@@ -1,9 +1,12 @@
 """Code Review Bot — CLI entry point."""
 
+import logging
 import os
 import sys
 import argparse
 from pathlib import Path
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
 # Ensure src directory is on the path
 sys.path.insert(0, str(Path(__file__).resolve().parent))

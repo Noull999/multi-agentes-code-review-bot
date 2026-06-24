@@ -8,7 +8,15 @@ from pathlib import Path
 from crewai.tools import tool
 
 # Output directory — sandboxed. All writes stay inside this root.
-OUTPUT_BASE = Path(os.getenv("CONSULTOR_OUTPUT", "./output")).resolve()
+_CONSULTOR_ROOT = Path(__file__).resolve().parent.parent.parent  # project root
+_OUTPUT_ENV = os.getenv("CONSULTOR_OUTPUT", "./output")
+OUTPUT_BASE = Path(_OUTPUT_ENV).resolve()
+# P0: constrain to project root — reject env var paths that escape
+try:
+    OUTPUT_BASE.relative_to(_CONSULTOR_ROOT)
+except ValueError:
+    OUTPUT_BASE = _CONSULTOR_ROOT / "output"
+    print(f"⚠️ CONSULTOR_OUTPUT='{_OUTPUT_ENV}' escapa del proyecto. Usando: {OUTPUT_BASE}")
 
 
 @tool("GenerateProposalDocument")

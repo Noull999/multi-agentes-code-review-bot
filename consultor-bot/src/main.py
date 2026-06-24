@@ -1,5 +1,6 @@
 """Consultor Full-Stack Automatizado — CLI entry point."""
 
+import logging
 import os
 import sys
 import argparse
@@ -10,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from openai import OpenAI
 from crewai import LLM
 from crew_runner import run_crew
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
 
 def load_env():

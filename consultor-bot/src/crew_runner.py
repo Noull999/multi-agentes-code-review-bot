@@ -1,9 +1,12 @@
 """Crew runner — orchestrate the consultant agents."""
 
+import logging
 import os
 from pathlib import Path
 
 from crewai import Crew, Process
+
+logger = logging.getLogger(__name__)
 
 
 def run_crew(client_input: str, llm=None) -> str:
@@ -30,6 +33,7 @@ def run_crew(client_input: str, llm=None) -> str:
         print(f"\n✅ Pipeline de consultoría completado.\n")
         return result
     except Exception as e:
+        logger.exception("Pipeline de consultoría falló")
         error_msg = f"❌ Pipeline de consultoría falló: {e}"
         print(error_msg)
         return error_msg

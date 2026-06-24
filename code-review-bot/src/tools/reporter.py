@@ -1,12 +1,21 @@
 """Tool: generate structured reports."""
 
+import html
 import os
 from datetime import datetime
 from pathlib import Path
 from crewai.tools import tool
 
-# Output directory for reports — sandboxed
-REPORTS_DIR = Path(os.getenv("CODE_REVIEW_OUTPUT", "./reports")).resolve()
+# Output directory for reports — sandboxed against project root
+_CODE_REVIEW_ROOT = Path(__file__).resolve().parent.parent.parent  # project root
+_REPORTS_ENV = os.getenv("CODE_REVIEW_OUTPUT", "./reports")
+REPORTS_DIR = Path(_REPORTS_ENV).resolve()
+# P0: constrain to project root — reject env var paths that escape
+try:
+    REPORTS_DIR.relative_to(_CODE_REVIEW_ROOT)
+except ValueError:
+    REPORTS_DIR = _CODE_REVIEW_ROOT / "reports"
+    print(f"⚠️ CODE_REVIEW_OUTPUT='{_REPORTS_ENV}' escapa del proyecto. Usando: {REPORTS_DIR}")
 
 
 @tool("GenerateReviewReport")
@@ -26,7 +35,7 @@ def generate_review_report(report_content: str) -> str:
 
 """
 
-    full = header + report_content
+    full = header + html.escape(report_content, quote=False)
     out_path = REPORTS_DIR / filename
 
     try:

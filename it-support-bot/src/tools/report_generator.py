@@ -1,13 +1,22 @@
 """Tool: generate professional IT support reports."""
 
+import html
 import os
 import re
 from datetime import datetime
 from pathlib import Path
 from crewai.tools import tool
 
-# Output directory for reports — sandboxed
-REPORTS_DIR = Path(os.getenv("IT_SUPPORT_OUTPUT", "./reports")).resolve()
+# Output directory for reports — sandboxed against project root
+_IT_SUPPORT_ROOT = Path(__file__).resolve().parent.parent.parent  # project root
+_REPORTS_ENV = os.getenv("IT_SUPPORT_OUTPUT", "./reports")
+REPORTS_DIR = Path(_REPORTS_ENV).resolve()
+# P0: constrain to project root — reject env var paths that escape
+try:
+    REPORTS_DIR.relative_to(_IT_SUPPORT_ROOT)
+except ValueError:
+    REPORTS_DIR = _IT_SUPPORT_ROOT / "reports"
+    print(f"⚠️ IT_SUPPORT_OUTPUT='{_REPORTS_ENV}' escapa del proyecto. Usando: {REPORTS_DIR}")
 
 
 @tool("GenerateSupportReport")
@@ -79,7 +88,9 @@ def generate_support_report(
     try:
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
         out_path = REPORTS_DIR / filename
-        out_path.write_text(report, encoding="utf-8")
+        # P0: escape HTML to prevent stored XSS in generated reports
+        safe_report = html.escape(report, quote=False)
+        out_path.write_text(safe_report, encoding="utf-8")
         return f"✅ Reporte guardado: {out_path}"
     except Exception as e:
         # P0: don't leak report content in error message
