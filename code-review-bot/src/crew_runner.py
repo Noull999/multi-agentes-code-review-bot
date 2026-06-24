@@ -38,7 +38,11 @@ def run_crew(target_dir: str, llm=None) -> str:
         verbose=True,
     )
 
-    result = crew.kickoff()
-
-    print(f"\n✅ Code Review completado.\n")
-    return result
+    try:
+        result = crew.kickoff()
+        print(f"\n✅ Code Review completado.\n")
+        return result
+    except Exception as e:
+        error_msg = f"❌ Code Review falló: {e}"
+        print(error_msg)
+        return error_msg

@@ -26,7 +26,11 @@ def run_crew(issue: str, llm=None) -> str:
         verbose=True,
     )
 
-    result = crew.kickoff()
-
-    print(f"\n✅ Soporte IT completado.\n")
-    return result
+    try:
+        result = crew.kickoff()
+        print(f"\n✅ Soporte IT completado.\n")
+        return result
+    except Exception as e:
+        error_msg = f"❌ Soporte IT falló: {e}"
+        print(error_msg)
+        return error_msg

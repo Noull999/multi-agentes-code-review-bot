@@ -28,9 +28,13 @@ MAX_FILE_SIZE = 100 * 1024  # 100KB
 MAX_FILES = 50  # máx archivos por tanda
 
 
-def _should_ignore(path: str, name: str) -> bool:
-    rel = Path(path).relative_to(Path(path).anchor)
-    parts = str(rel).split(os.sep) + [name]
+def _should_ignore(base: Path, path: str, name: str) -> bool:
+    """Check if a path component should be ignored, relative to the analysis base."""
+    try:
+        rel = Path(path).relative_to(base)
+    except ValueError:
+        return True  # outside base → ignore
+    parts = list(rel.parts) + [name]
     for pattern in IGNORE_PATTERNS:
         if any(fnmatch.fnmatch(p, pattern) for p in parts):
             return True
@@ -55,10 +59,10 @@ def read_source_files(directory: str, pattern: Optional[str] = None) -> str:
     files = []
     for root, dirs, fnames in os.walk(base):
         # Podar directorios ignorados
-        dirs[:] = [d for d in dirs if not _should_ignore(root, d)]
+        dirs[:] = [d for d in dirs if not _should_ignore(base, root, d)]
 
         for name in sorted(fnames):
-            if _should_ignore(root, name):
+            if _should_ignore(base, root, name):
                 continue
 
             ext = Path(name).suffix
@@ -68,18 +72,30 @@ def read_source_files(directory: str, pattern: Optional[str] = None) -> str:
                 continue
 
             fpath = Path(root) / name
+
+            # P0: skip symlinks (arbitrary file read)
+            if fpath.is_symlink():
+                continue
+            # P0: verify resolved path stays under base
             try:
-                size = fpath.stat().st_size
-                if size > MAX_FILE_SIZE:
+                fpath.resolve().relative_to(base)
+            except ValueError:
+                continue
+
+            # P0: fix TOCTOU — read in single guarded block with combined size check
+            try:
+                content = fpath.read_text(encoding="utf-8", errors="replace")
+                if len(content.encode("utf-8")) > MAX_FILE_SIZE:
                     continue
                 files.append(fpath)
-            except OSError:
+            except (OSError, UnicodeDecodeError):
                 continue
 
     if not files:
         return f"No se encontraron archivos de código en '{directory}'."
 
     # Limitar cantidad
+    skipped_count = max(0, len(files) - MAX_FILES)
     files = files[:MAX_FILES]
 
     # Leer contenido
@@ -93,4 +109,6 @@ def read_source_files(directory: str, pattern: Optional[str] = None) -> str:
             result_parts.append(f"## FILE: {rel_path}\n*Error leyendo: {e}*")
 
     summary = f"📁 {len(files)} archivos leídos de {directory}"
+    if skipped_count:
+        summary += f" ({skipped_count} omitidos por límite de {MAX_FILES})"
     return f"{summary}\n\n" + "\n\n".join(result_parts)

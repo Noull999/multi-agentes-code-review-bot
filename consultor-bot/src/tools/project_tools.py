@@ -2,9 +2,13 @@
 
 import json
 import os
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from crewai.tools import tool
+
+# Output directory — sandboxed. All writes stay inside this root.
+OUTPUT_BASE = Path(os.getenv("CONSULTOR_OUTPUT", "./output")).resolve()
 
 
 @tool("GenerateProposalDocument")
@@ -23,7 +27,14 @@ def generate_proposal_document(
     Devuelve la ruta del archivo generado.
     """
     timestamp = datetime.now()
-    filename = f"propuesta-{project_name.lower().replace(' ', '-')}-{timestamp.strftime('%Y%m%d')}.md"
+
+    # P0: sanitize project_name to prevent path traversal
+    safe_name = re.sub(r'[^a-zA-Z0-9_\- ]', '', project_name)[:60].strip().lower().replace(' ', '-')
+    if not safe_name:
+        safe_name = "proyecto"
+
+    # Include seconds to avoid overwrite on same-day runs
+    filename = f"propuesta-{safe_name}-{timestamp.strftime('%Y%m%d_%H%M%S')}.md"
 
     # f-strings can't contain triple-quoted strings (SyntaxError in Python < 3.12)
     default_terms = (
@@ -34,13 +45,22 @@ def generate_proposal_document(
     )
     terms_text = terms if terms else default_terms
 
-    # Calcular fechas estimadas
+    # P1: fix milestone dates for short timelines
+    timeline_weeks = max(timeline_weeks, 1) if isinstance(timeline_weeks, int) else 4
     start_date = timestamp + timedelta(days=3)
     end_date = start_date + timedelta(weeks=timeline_weeks)
     milestones = []
-    for i in range(1, 4):
-        ms_date = start_date + timedelta(weeks=(timeline_weeks // 3) * i)
-        milestones.append(f"  - Hito {i}: {ms_date.strftime('%d/%m/%Y')}")
+    if timeline_weeks >= 3:
+        for i in range(1, 4):
+            ms_date = start_date + timedelta(weeks=(timeline_weeks // 3) * i)
+            milestones.append(f"  - Hito {i}: {ms_date.strftime('%d/%m/%Y')}")
+    else:
+        # For short timelines, distribute milestones proportionally
+        mid = start_date + timedelta(weeks=timeline_weeks // 2)
+        milestones = [
+            f"  - Hito 1: {mid.strftime('%d/%m/%Y')}",
+            f"  - Entrega final: {end_date.strftime('%d/%m/%Y')}",
+        ]
 
     doc = f"""# Propuesta Técnica: {project_name}
 
@@ -81,9 +101,7 @@ def generate_proposal_document(
 
 - **Inicio:** {start_date.strftime('%d/%m/%Y')}
 - **Desarrollo:** {timeline_weeks} semanas ({start_date.strftime('%d/%m/%Y')} → {end_date.strftime('%d/%m/%Y')})
-{milestones[0]}
-{milestones[1]}
-{milestones[2]}
+{chr(10).join(milestones)}
 - **Entrega final:** {end_date.strftime('%d/%m/%Y')}
 
 ---
@@ -119,11 +137,16 @@ Full-Stack Developer · Puerto Montt, Chile
 """
 
     try:
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(doc)
-        return f"✅ Propuesta generada: {filename}"
+        OUTPUT_BASE.mkdir(parents=True, exist_ok=True)
+        out_path = OUTPUT_BASE / filename
+        # P0: verify resolved path stays inside OUTPUT_BASE
+        if not out_path.resolve().is_relative_to(OUTPUT_BASE.resolve()):
+            raise ValueError("Path escapes output directory")
+        out_path.write_text(doc, encoding="utf-8")
+        return f"✅ Propuesta generada: {out_path}"
     except Exception as e:
-        return f"⚠️ Error: {e}\n\n---\n{doc}"
+        # P1: don't leak document content in error
+        return f"⚠️ Error generando propuesta: {e}"
 
 
 @tool("ScaffoldProject")
@@ -137,9 +160,15 @@ def scaffold_project(
     Soporta: nextjs, fastapi, nextjs-fastapi.
     Devuelve la ruta y el árbol de directorios creado.
     """
-    base = Path(project_name).resolve()
+    # P0: sanitize project_name and restrict to OUTPUT_BASE
+    safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '-', project_name)[:60].strip()
+    if not safe_name:
+        return "⚠️ Invalid project name"
+    base = (OUTPUT_BASE / safe_name).resolve()
+    if not base.is_relative_to(OUTPUT_BASE.resolve()):
+        return "⚠️ Path escapes output directory"
     if base.exists():
-        return f"⚠️ Ya existe un directorio '{project_name}'"
+        return f"⚠️ Ya existe un directorio '{base}'"
 
     structure = {}
 
@@ -239,17 +268,27 @@ def scaffold_project(
 def generate_code_file(filepath: str, code_content: str) -> str:
     """
     Crea o sobrescribe un archivo de código con el contenido especificado.
-    Recibe: ruta del archivo y contenido completo.
+    Recibe: ruta del archivo y contenido completo (relativo a OUTPUT_BASE).
     Útil para: crear componentes, APIs, schemas, tests, etc.
     """
-    path = Path(filepath).resolve()
-    path.parent.mkdir(parents=True, exist_ok=True)
+    if not filepath or not code_content:
+        return "❌ Error: filepath y code_content son requeridos"
+
+    # P0: sanitize path — restrict to OUTPUT_BASE
+    # Remove leading ../ or / to prevent traversal
+    clean_path = filepath.lstrip("/").lstrip("\\")
+    path = (OUTPUT_BASE / clean_path).resolve()
+    if not path.is_relative_to(OUTPUT_BASE.resolve()):
+        return "❌ Error: la ruta escapa del directorio de salida permitido"
 
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(code_content, encoding="utf-8")
         return f"✅ Archivo creado: {path} ({len(code_content)} bytes)"
     except Exception as e:
-        return f"❌ Error creando {filepath}: {e}"
+        # P1: raise so CrewAI surfaces the failure
+        from crewai.tools import ToolException
+        raise ToolException(f"Error creando archivo: {e}") from e
 
 
 # Helper

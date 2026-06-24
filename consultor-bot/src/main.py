@@ -102,14 +102,14 @@ Ejemplos:
     os.environ["OPENAI_API_KEY"] = api_key
     llm = LLM(model=f"openai/{model}", api_key=api_key, base_url=base_url)
 
-    # Create LLM for CrewAI (openai/ prefix for openai-compatible API)
-    llm = LLM(model=f"openai/{model}", api_key=api_key, base_url=base_url)
-
-    # --- Execute ---
-    result = run_crew(client_input, llm=llm)
-
-    print("\n📋 Resultado final:\n")
-    print(result)
+    # --- Ejecutar ---
+    try:
+        result = run_crew(client_input, llm=llm)
+        print("\n📋 Resultado final:\n")
+        print(result)
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

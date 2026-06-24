@@ -1,17 +1,23 @@
 """Tool: generate structured reports."""
 
+import os
 from datetime import datetime
+from pathlib import Path
 from crewai.tools import tool
+
+# Output directory for reports — sandboxed
+REPORTS_DIR = Path(os.getenv("CODE_REVIEW_OUTPUT", "./reports")).resolve()
 
 
 @tool("GenerateReviewReport")
-def generate_review_report(report_content: str, output_path: str = "") -> str:
+def generate_review_report(report_content: str) -> str:
     """
     Genera un reporte de revisión de código en formato markdown.
-    Recibe el contenido del reporte y opcionalmente una ruta de salida.
-    Devuelve la ruta donde se guardó.
+    Recibe el contenido del reporte.
+    Devuelve la ruta donde se guardó (siempre dentro de reports/).
     """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    filename = f"code-review-{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
 
     header = f"""# 🔍 Code Review Report
 **Generado:** {timestamp}
@@ -21,17 +27,14 @@ def generate_review_report(report_content: str, output_path: str = "") -> str:
 """
 
     full = header + report_content
-
-    if not output_path:
-        output_path = f"code-review-{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+    out_path = REPORTS_DIR / filename
 
     try:
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(full)
-        return f"✅ Reporte guardado en: {output_path}"
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(full, encoding="utf-8")
+        return f"✅ Reporte guardado en: {out_path}"
     except Exception as e:
-        # fallback: devolver el contenido
-        return f"⚠️ No se pudo guardar: {e}\n\n---\n{full}"
+        return f"⚠️ No se pudo guardar: {e}"
 
 
 @tool("ListFilesInRepo")
@@ -44,6 +47,13 @@ def list_files_in_repo(directory: str, extension: str = "") -> str:
     from pathlib import Path
 
     base = Path(directory).expanduser().resolve()
+    # P0: bind to validated directory — reject path traversal
+    allowed_base = Path(os.getenv("CODE_REVIEW_TARGET", ".")).resolve()
+    try:
+        base.relative_to(allowed_base)
+    except ValueError:
+        return f"ERROR: '{directory}' está fuera del directorio permitido ({allowed_base})"
+
     if not base.exists():
         return f"ERROR: '{directory}' no existe"
 

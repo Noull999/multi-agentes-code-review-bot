@@ -25,7 +25,11 @@ def run_crew(client_input: str, llm=None) -> str:
         verbose=True,
     )
 
-    result = crew.kickoff()
-
-    print(f"\n✅ Pipeline de consultoría completado.\n")
-    return result
+    try:
+        result = crew.kickoff()
+        print(f"\n✅ Pipeline de consultoría completado.\n")
+        return result
+    except Exception as e:
+        error_msg = f"❌ Pipeline de consultoría falló: {e}"
+        print(error_msg)
+        return error_msg

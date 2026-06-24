@@ -12,6 +12,8 @@ from crew_runner import run_crew
 
 
 def load_env():
+    """Load .env with support for quoted values and inline comments."""
+    import shlex
     env_path = Path(__file__).resolve().parent.parent / ".env"
     if env_path.exists():
         for line in env_path.read_text().splitlines():
@@ -19,7 +21,16 @@ def load_env():
             if not line or line.startswith("#") or "=" not in line:
                 continue
             key, _, val = line.partition("=")
-            os.environ.setdefault(key.strip(), val.strip())
+            key = key.strip()
+            val = val.strip()
+            # Handle quoted values
+            if val and val[0] in '"\'' and val[-1] == val[0]:
+                val = val[1:-1]
+            # Strip inline comments (only after non-quoted values)
+            if not (val.startswith('"') or val.startswith("'")):
+                val = val.split(" #")[0].split("\t#")[0].strip()
+            if key and val:
+                os.environ.setdefault(key, val)
 
 
 def main():
@@ -113,10 +124,13 @@ Ejemplos:
         sys.exit(1)
 
     # --- Ejecutar ---
-    result = run_crew(args.issue, llm=llm)
-
-    print("\n📋 Resultado final:\n")
-    print(result)
+    try:
+        result = run_crew(args.issue, llm=llm)
+        print("\n📋 Resultado final:\n")
+        print(result)
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

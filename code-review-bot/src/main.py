@@ -139,10 +139,13 @@ Ejemplos:
         sys.exit(1)
 
     # --- Ejecutar ---
-    result = run_crew(target, llm=llm)
-
-    print("\n📋 Resultado final:\n")
-    print(result)
+    try:
+        result = run_crew(target, llm=llm)
+        print("\n📋 Resultado final:\n")
+        print(result)
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,13 @@
 """Tool: generate professional IT support reports."""
 
+import os
+import re
 from datetime import datetime
+from pathlib import Path
 from crewai.tools import tool
+
+# Output directory for reports — sandboxed
+REPORTS_DIR = Path(os.getenv("IT_SUPPORT_OUTPUT", "./reports")).resolve()
 
 
 @tool("GenerateSupportReport")
@@ -21,7 +27,13 @@ def generate_support_report(
     """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     report_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"soporte-{client_name.lower().replace(' ', '-')}-{report_id}.md"
+
+    # P0: sanitize client_name to prevent path traversal
+    safe_client = re.sub(r'[^a-zA-Z0-9_\- ]', '', client_name)[:50].strip().lower().replace(' ', '-')
+    if not safe_client:
+        safe_client = "cliente"
+
+    filename = f"soporte-{safe_client}-{report_id}.md"
 
     report = f"""# 🛠️ Reporte de Soporte Técnico
 
@@ -65,8 +77,10 @@ def generate_support_report(
 """
 
     try:
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(report)
-        return f"✅ Reporte guardado: {filename}"
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        out_path = REPORTS_DIR / filename
+        out_path.write_text(report, encoding="utf-8")
+        return f"✅ Reporte guardado: {out_path}"
     except Exception as e:
-        return f"⚠️ Error guardando reporte: {e}\n\n---\n{report}"
+        # P0: don't leak report content in error message
+        return f"⚠️ Error guardando reporte: {e}"
